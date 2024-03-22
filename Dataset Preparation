@@ -19,7 +19,7 @@ dataset
 
 dataset = pd.read_csv('dataset.csv')
 dataset = dataset.dropna(axis=0,thresh=15)
-dataset.to_csv('filtered_dataset.csv') #filtered countries
+dataset.to_csv('filtered_dataset.csv')
 dataset
 
 for col in dataset.columns:
