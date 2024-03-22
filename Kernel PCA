@@ -1,0 +1,32 @@
+from sklearn.datasets import load_digits
+from sklearn.decomposition import KernelPCA
+from matplotlib import cm
+from sklearn.cluster import KMeans
+import numpy as np
+idx = 0
+num_yr = 17
+yr_len = 255
+kpcas = []
+km = []
+for yr in range(0, num_yr):
+    data_trim = returns.iloc[idx:idx+yr_len].copy()
+    print('start of year:', yr, (idx, idx+yr_len))
+    idx += yr_len
+    km.append(KMeans(n_clusters=3, init='k-means++', algorithm='lloyd').fit(data_trim.transpose()))
+    transformer = KernelPCA(n_components=24, kernel='rbf')
+    kpcas.append(transformer.fit_transform(data_trim.transpose()))
+
+import seaborn as sns
+selected_names = {0: "CHN", 1: "ITA", 2: "SA", 3: "NLD",4: "AUS", 5: "BEL",6: "BRA", 7: "FRA", 8: "UK",9: "GER",10: "US",
+                 11: "CAN",12: "HKG",13: "SPA",14: "MYS",15: "KOR",16: "ARG",17: "JPN",18: "IND", 19: "NZL", 20: "THA",21: "SWI",22: "SGP",23:"TWN"}
+fig, ax = plt.subplots()
+sc =ax.scatter(x=kpcas[1][:,0], y=kpcas[1][:,1], c=km[1].labels_, cmap='cool', s=100)
+for i, labels in enumerate(selected_names.values()):
+  plt.annotate(labels, (kpcas[1][:,0][i], kpcas[1][:,1][i]))
+#sns.scatterplot(x=km[4].cluster_centers_[:,0],y=km[4].cluster_centers_[:,1], s = 300, c=["black"], label="Centroids")
+plt.title('Clustered Global Indices using KernelPCA (RBF) -2008')
+plt.xlabel('1st Principal Component (PC1)')
+plt.ylabel('2nd Principal Component (PC2)')
+ax.legend(*sc.legend_elements(), title='Clusters')
+plt.show()
+km[1].labels_
