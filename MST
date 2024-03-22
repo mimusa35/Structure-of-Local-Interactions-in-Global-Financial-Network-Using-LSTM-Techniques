@@ -1,0 +1,93 @@
+def make_symmetric(matrix):
+    # Get the shape of the matrix
+    rows, cols = matrix.shape
+
+    # Ensure the matrix is square
+    if rows != cols:
+        raise ValueError("Input matrix must be square")
+
+    # Create a symmetric matrix with zeros
+    symmetric_matrix = np.zeros((rows, cols))
+
+    # Iterate through the upper triangular part of the original matrix
+    for i in range(rows):
+        for j in range(i, cols):
+            # Average corresponding elements to make it symmetric
+            symmetric_matrix[i, j] = symmetric_matrix[j, i] = (matrix[i, j] + matrix[j, i]) / 2
+
+    return symmetric_matrix
+
+wts = np.random.rand(18, 18)
+symmetric_matrix = make_symmetric(wts)
+
+print("Symmetric matrix:")
+print(symmetric_matrix)
+
+returns = pd.read_csv('final_filtered_dataset.csv')
+idx = 0
+num_yr = 17
+yr_len = 255
+msts = []
+selected_names = {1: "CHN", 2: "ITA", 3: "SA", 4: "NLD",5: "AUS", 6: "BEL",7: "BRA", 8: "FRA", 9: "UK",10: "GER",11: "US",
+                 12: "CAN",13: "HKG",14: "SPA",15: "MYS",16: "KOR",17: "ARG",18: "JPN",19: "IND", 20: "NZL", 21: "THA",22: "SWI",23: "SGP",24:"TWN"}
+
+top_bc_values = []
+top_nodes = []
+color_map = []
+
+for node in countries_of_continent:
+  continent_name = countries_of_continent[node]
+  if continent_name == "Asia-Pacific":
+      color_map.append('#66CDAA')
+  elif continent_name == "America":
+      color_map.append('#FF4040')
+  else:
+      color_map.append('#8B7355')
+
+# Plot each MST separately
+for k in range(num_yr):
+    ret = returns.iloc[idx:idx + yr_len, :]
+    idx += yr_len
+    corr = ret.corr()
+    dis = np.sqrt(2 * (1 - corr))
+
+    # Select only 24 countries for the MST
+    G3 = nx.from_numpy_array(dis.iloc[:24, :24].to_numpy())
+
+    mst = nx.minimum_spanning_tree(G3)
+    msts.append(mst)
+
+    # Identify most central nodes of each MST
+    bc = nx.betweenness_centrality(mst)
+    bcs = sorted(bc.items(), key=lambda x: x[1], reverse=True)
+    hnode, hbc_val = bcs[0]
+    top_bc_values.append(hbc_val)
+
+    # Adjusting for 0-based index
+    top_nodes.append(selected_names[hnode + 1])
+
+    # Plot each MST separately
+    fig = plt.figure(figsize=(10, 10))
+
+    # Calculate positions for all nodes in the MST
+    pos = nx.kamada_kawai_layout(mst)
+
+    # Draw nodes with labels
+    nx.draw_networkx_nodes(mst, pos, node_color=color_map, node_size=500, cmap=plt.cm.coolwarm, vmin=0, vmax=1)
+
+    # Ensure labels are drawn only for existing nodes in the graph
+    nx.draw_networkx_labels(mst, pos, labels={node: selected_names[node + 1] for node in mst.nodes()}, font_size=9)
+
+    # Draw edges
+    nx.draw_networkx_edges(mst, pos, edge_color='darkslategray')
+
+    plt.title(f'Minimum Spanning Tree - Year {k+2007}')
+    plt.show()
+
+# Display the most central nodes for each MST
+for k in range(num_yr):
+    print(f"Year {k+1} - Top Node: {top_nodes[k]}, Betweenness Centrality: {top_bc_values[k]}")
+
+# Display overall top nodes and BC values
+print("Top Nodes:", top_nodes)
+print("Top Betweenness Centrality Values:", top_bc_values)
