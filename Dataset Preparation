@@ -1,0 +1,66 @@
+import pandas as pd
+import yfinance as yf
+import numpy as np
+import networkx as nx
+import networkx.algorithms.community as nx_comm
+import matplotlib.pyplot as plt
+
+#!pip install yfinance
+symbols = ["^AXJO","000001.SS","^HSI","^NSEI","^N225","^KS11","^KLSE","^NZ50","^STI","^TWII","^SET.BK",
+           "^BFX","^FCHI","^GDAXI","FTSEMIB.MI","^AEX","JSE.JO","^IBEX","^SSMI","^FTSE",
+           "^MERV","^BVSP","^GSPTSE","^GSPC"]
+
+from sqlalchemy.sql.expression import false
+import yfinance as yf
+dataset = yf.download(symbols,  start='2000-01-01',  end='2023-12-31', progress=True)["Close"]
+# dataset=dataset.reindex(columns = symbols)
+dataset.to_csv("dataset.csv")
+dataset
+
+dataset = pd.read_csv('dataset.csv')
+dataset = dataset.dropna(axis=0,thresh=15)
+dataset.to_csv('filtered_dataset.csv') #filtered countries
+dataset
+
+for col in dataset.columns:
+  if col=="Date":
+    continue
+  single = dataset[col]
+  nan_cnt = np.isnan(single).sum()
+  print(col, nan_cnt)
+
+cols = []
+cols.append('Date')
+for col in dataset.columns[1:]:
+  single_com = dataset[col]
+  nan_cnt = np.isnan(single_com).sum()
+  if nan_cnt < 850:
+    cols.append(col)
+dataset = dataset[cols]
+dataset
+
+stocks = dataset.iloc[:, 1:].ffill().bfill()
+log_data = stocks.applymap(np.log)
+returns = log_data - log_data.shift(1)
+returns = returns.drop(returns.index[0])
+names = returns.columns
+returns.to_csv('final_filtered_dataset.csv')
+returns
+
+id2name = {}
+name2id = {}
+for i, n in enumerate(names):
+  id2name[i] = n
+  name2id[n] = i
+
+def color_map(symbol_list, sector_list, color_list, filter_list):
+  unqsec = list(set(sector_list))
+  sec2col= {}
+  for sec, col in zip(unqsec, color_list):
+    sec2col[sec] = col
+
+  cmap={}
+  for sym, sec in zip(symbol_list, sector_list):
+    cmap[sym] = sec2col[sec]
+  cmp_filter = [cmap[key] for key in filter_list]
+  return cmp_filter
