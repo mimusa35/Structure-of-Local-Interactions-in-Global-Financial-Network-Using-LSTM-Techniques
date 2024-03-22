@@ -1,0 +1,166 @@
+import tensorflow as tf
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense, RepeatVector
+from tensorflow.keras.layers import LSTM, Input,TimeDistributed
+from tensorflow.keras import Model
+from keras.constraints import Constraint
+from tensorflow.python.keras import constraints
+from tensorflow.python.keras.engine.base_layer import Layer
+from tensorflow.python.keras.engine.input_spec import InputSpec
+from tensorflow.python.ops import array_ops
+from tensorflow.keras.backend import repeat_elements
+import keras.backend as K
+
+class RepeatVector3D(Layer):
+
+  def __init__(self, n, **kwargs):
+    super(RepeatVector3D, self).__init__(**kwargs)
+    self.n = n
+    self.input_spec = InputSpec(ndim=3)
+
+  def compute_output_shape(self, input_shape):
+    input_shape = tensor_shape.TensorShape(input_shape).as_list()
+    return tensor_shape.TensorShape([input_shape[0], self.n, input_shape[1]])
+
+  def call(self, inputs):
+    inputs = array_ops.expand_dims(inputs, 2)
+    repeat = repeat_elements(inputs, self.n, axis=2)
+    return repeat
+
+  def get_config(self):
+    config = {'n': self.n}
+    base_config = super(RepeatVector3D, self).get_config()
+    return dict(list(base_config.items()) + list(config.items()))
+
+class Between(Constraint):
+    def __init__(self):
+        self.min_value = 0
+        self.max_value = 1
+
+    def __call__(self, w):
+        return K.clip(w, self.min_value, self.max_value)
+
+    def get_config(self):
+        return {'min_value': self.min_value,
+                'max_value': self.max_value}
+
+class Dense2D(tf.keras.layers.Layer):
+
+  def __init__(self, units, kernel_constraint=Between(), activationTenh=False):
+      super(Dense2D, self).__init__()
+      self.units = units
+      self.activationTenh = activationTenh
+      self.kernel_constraint = constraints.get(kernel_constraint)
+  def build(self, input_shape):
+      self.w = self.add_weight(
+          name="w",
+          shape=(self.units, self.units),
+          initializer="random_normal",
+          constraint=self.kernel_constraint,
+          trainable=True,
+      )
+  def call(self, inputs):
+        if self.activationTenh:
+            return tf.keras.activations.tanh(tf.matmul(self.w, inputs))
+        else:
+            return tf.matmul(self.w, inputs)
+
+#temp
+def build_model(num_nodes, win_size=5, units=64, activation='relu'):
+    inp = Input(shape=(num_nodes, win_size, 1))
+    out = TimeDistributed(LSTM(units,activation=activation, return_sequences=True))(inp)
+    out = TimeDistributed(LSTM(units//2,activation=activation, return_sequences=False))(inp)
+    #out = TimeDistributed(LSTM(units//4,activation=activation, return_sequences=False))(inp)
+    out = Dense2D(num_nodes, kernel_constraint=None)(out)
+    out = RepeatVector3D(win_size)(out)
+    #out = TimeDistributed(LSTM(units//4, activation=activation, return_sequences=True))(out)
+    out = TimeDistributed(LSTM(units//2, activation=activation, return_sequences=True))(out)
+    out = TimeDistributed(LSTM(units, activation=activation, return_sequences=True))(out)
+    out = TimeDistributed(Dense(1))(out)
+    model = Model(inp, out)
+    model.compile(optimizer='adam', loss='mse')
+    return model
+
+def prepare_dataset(data, win_size=5, normalize=True):
+    if normalize:
+        data = (data-data.mean())/data.std()
+    X = []
+    for i in range(len(data)-win_size):
+        X.append(data.iloc[i:i+win_size,:].T)
+    y = np.array(X)
+    return np.expand_dims(X, axis=-1), y
+
+win_size = 5
+seed = 1 #2 #3
+epochs = 35 #35
+lr=1e-4
+device='cuda'
+batch_size = 16 #8 #32
+num_nodes = returns.shape[1]
+num_yr = 17
+yr_len = 255
+units = 64
+num_layers = 2
+
+idx = 0
+wts = []
+for yr in range(0, num_yr):
+    data_trim = returns.iloc[idx:idx+yr_len].copy()
+    print('start of year:', yr, (idx, idx+yr_len))
+    idx += yr_len
+    X, y = prepare_dataset(data_trim, win_size, normalize=True)
+    tf.keras.utils.set_random_seed(seed)
+    tf.config.experimental.enable_op_determinism()
+
+from keras.utils import plot_model
+plot_model(model, to_file='model_plot.png', show_shapes=True, show_layer_names=True)
+
+def entropy(graph):
+  deg = sum(d for n, d in graph.degree())
+  ent = 0
+  for _, d in graph.degree():
+    proba = d/deg
+    ent += (proba*np.log2(proba))
+  ent = -1*ent
+  return ent
+
+#dictionary of country to sector
+node_sect_map = {
+    0: "Asia-Pacific", #china
+    1: "Europe-Africa", #Italy
+    2: "Europe-Africa", #South Africa
+    3: "Europe-Africa", #Netherlands
+    4: "Asia-Pacific", #Australia
+    5: "Europe-Africa", #Belgium
+    6: "America", #Brazil
+    7: "Europe-Africa", #France
+    8: "Europe-Africa", #UK
+    9: "Europe-Africa", #Germany
+    10: "America", #US
+    11: "America", #Canada
+    12: "Asia-Pacific", #Hong Kong
+    13: "Europe-Africa", #Spain
+    14: "Asia-Pacific", #Malaysia
+    15: "Asia-Pacific", #Korea
+    16: "America", #Argentina
+    17: "Asia-Pacific", #Japan
+    18: "Asia-Pacific", #India
+    19: "Asia-Pacific", #New Zealand
+    20: "Asia-Pacific", #Thailand
+    21: "Europe-Africa", #Switzerland
+    22: "Asia-Pacific", #Singapore
+    23: "Asia-Pacific", #Taiwan
+}
+unq_sect = ["Asia-Pacific","Europe-Africa","America"]
+
+
+    model = build_model(num_nodes, win_size, units, 'relu')
+    model.fit(X, y, batch_size=batch_size, epochs=epochs, verbose=False)
+    wts.append(model.weights[-9].numpy())
+    print('end of year:', yr)
+
+
+wts = np.array(wts)
+
+wts2D = wts.reshape(wts.shape[0], -1)
+np.savetxt("demo_seed1.txt", wts2D)
